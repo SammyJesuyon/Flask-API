@@ -198,7 +198,6 @@ def delete_template(current_user, template_id):
             400,
         )
 
-
 @app.errorhandler(403)
 def forbidden(e):
     return jsonify({"message": "Forbidden", "error": str(e), "data": None}), 403
