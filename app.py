@@ -20,7 +20,7 @@ from models import Templates, User, user_collection
 
 from utils import token_required
 
-@app.route("/", methods=["GET"])
+@app.route("/")
 def hello():
     return "Hello World!"
 
