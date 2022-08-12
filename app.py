@@ -3,49 +3,47 @@ import os
 import jwt
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
-
+import validators
 from validate import (validate_email_and_password, validate_template,
                       validate_user)
 
 load_dotenv()
 
 app = Flask(__name__)
+
+#generated using secrets.token_hex(16) from the python secrets library
 SECRET_KEY = os.environ.get("SECRET_KEY") or "this is a secret"
 
 app.config["SECRET_KEY"] = SECRET_KEY
 
-from models import Templates, User
+from models import Templates, User, user_collection
 
 from utils import token_required
-
 
 @app.route("/")
 def hello():
     return "Hello World!"
 
 
-@app.route("/users/", methods=["POST"])
+@app.route("/register", methods=["POST"])
 def add_user():
-    try:
-        user = request.json
-        if not user:
-            return {
-                "message": "Please provide user details",
-                "data": None,
-                "error": "Bad request",
-            }, 400
-        is_validated = validate_user(**user)
-        if is_validated is not True:
-            return dict(message="Invalid data", data=None, error=is_validated), 400
-        user = User().create(**user)
-        if not user:
-            return {"message": "User already exists", "error": "Conflict", "data": None}, 409
-        return {"message": "Successfully created new user", "data": user}, 201
-    except Exception as e:
-        return {"message": "Something went wrong", "error": str(e), "data": None}, 500
+    first_name = request.json['first_name']
+    last_name = request.json['last_name']
+    email = request.json['email']
+    password = request.json['password']
+    if len(password)<6:
+        return jsonify({"message": "Password must be at least 6 characters"}), 400
+    if not first_name.isalpha() or not last_name.isalpha() or " " in first_name or " " in last_name:
+        return jsonify({"message": "Please verify that you have a correct name and no spaces in between"}), 400
+    if not validators.email(email):
+        return jsonify({"message": "Please verify that you have a correct email"}), 400
+    if user_collection.find_one({"email": email}):
+        return jsonify({"message": "Email already exists"}), 400
+    user = User()
+    user.create(first_name=first_name, last_name=last_name, email=email, password=password)
+    return jsonify({"message": "User created successfully"}), 201
 
-
-@app.route("/users/login", methods=["POST"])
+@app.route("/login", methods=["POST"])
 def login():
     try:
         data = request.json
@@ -55,10 +53,6 @@ def login():
                 "data": None,
                 "error": "Bad request",
             }, 400
-        # validate input
-        is_validated = validate_email_and_password(data.get("email"), data.get("password"))
-        if is_validated is not True:
-            return dict(message="Invalid data", data=None, error=is_validated), 400
         user = User().login(data["email"], data["password"])
         if user:
             try:
@@ -66,7 +60,7 @@ def login():
                 user["token"] = jwt.encode(
                     {"user_id": user["_id"]}, app.config["SECRET_KEY"], algorithm="HS256"
                 )
-                return {"message": "Successfully fetched auth token", "data": user}
+                return {"message": "Successfully Logged In", "data": user}
             except Exception as e:
                 return {"error": "Something went wrong", "message": str(e)}, 500
         return {
@@ -78,13 +72,13 @@ def login():
         return {"message": "Something went wrong!", "error": str(e), "data": None}, 500
 
 
-@app.route("/users/", methods=["GET"])
+@app.route("/users", methods=["GET"])
 @token_required
 def get_current_user(current_user):
     return jsonify({"message": "successfully retrieved user profile", "data": current_user})
 
 
-@app.route("/users/", methods=["PUT"])
+@app.route("/users", methods=["PUT"])
 @token_required
 def update_user(current_user):
     try:
@@ -101,7 +95,7 @@ def update_user(current_user):
         return jsonify({"message": "failed to update account", "error": str(e), "data": None}), 400
 
 
-@app.route("/users/", methods=["DELETE"])
+@app.route("/users", methods=["DELETE"])
 @token_required
 def disable_user(current_user):
     try:
@@ -111,7 +105,7 @@ def disable_user(current_user):
         return jsonify({"message": "failed to disable account", "error": str(e), "data": None}), 400
 
 
-@app.route("/templates/", methods=["POST"])
+@app.route("/template", methods=["POST"])
 @token_required
 def add_template(current_user):
     try:
@@ -124,9 +118,6 @@ def add_template(current_user):
             }, 400
 
         template["user_id"] = current_user["_id"]
-        is_validated = validate_template(**template)
-        if is_validated is not True:
-            return {"message": "Invalid data", "data": None, "error": is_validated}, 400
         template = Templates().create(**template)
         if not template:
             return {
@@ -142,7 +133,7 @@ def add_template(current_user):
         )
 
 
-@app.route("/templates/", methods=["GET"])
+@app.route("/template", methods=["GET"])
 @token_required
 def get_templates(current_user):
     try:
@@ -155,7 +146,7 @@ def get_templates(current_user):
         )
 
 
-@app.route("/templates/<template_id>", methods=["GET"])
+@app.route("/template/<template_id>", methods=["GET"])
 @token_required
 def get_template(current_user, template_id):
     try:
@@ -167,7 +158,7 @@ def get_template(current_user, template_id):
         return jsonify({"message": "Something went wrong", "error": str(e), "data": None}), 500
 
 
-@app.route("/templates/<template_id>", methods=["PUT"])
+@app.route("/template/<template_id>", methods=["PUT"])
 @token_required
 def update_template(current_user, template_id):
     try:
@@ -188,7 +179,7 @@ def update_template(current_user, template_id):
         )
 
 
-@app.route("/templates/<template_id>", methods=["DELETE"])
+@app.route("/template/<template_id>", methods=["DELETE"])
 @token_required
 def delete_template(current_user, template_id):
     try:

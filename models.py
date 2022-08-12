@@ -3,14 +3,18 @@ import os
 import bson
 from dotenv import load_dotenv
 from pymongo import MongoClient
+# from flask_pymongo import PyMongo
 from werkzeug.security import check_password_hash, generate_password_hash
 
 load_dotenv()
 
-DATABASE_URL = os.environ.get("DATABASE_URL") or "mongodb://localhost:27017/myDatabase"
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 client = MongoClient(DATABASE_URL)
-db = client.myDatabase
+db = client.get_database('testDB')
+user_collection=db.user
+template_collection=db.template
+
 
 
 class Templates:
@@ -24,19 +28,19 @@ class Templates:
         template = self.get_by_user_id_and_template_name(user_id, template_name)
         if template:
             return
-        new_template = db.templates.insert_one(
+        new_template = template_collection.insert_one(
             {"template_name": template_name, "body": body, "subject": subject, "user_id": user_id}
         )
         return self.get_by_id(new_template.inserted_id)
 
     def get_all(self):
         """Get all templates"""
-        templates = db.templates.find()
+        templates = template_collection.find()
         return [{**template, "_id": str(template["_id"])} for template in templates]
 
     def get_by_id(self, book_id):
         """Get a template by id"""
-        template = db.templates.find_one({"_id": bson.ObjectId(book_id)})
+        template = template_collection.find_one({"_id": bson.ObjectId(book_id)})
         if not template:
             return
         template["_id"] = str(template["_id"])
@@ -44,12 +48,12 @@ class Templates:
 
     def get_by_user_id(self, user_id):
         """Get all templates created by a user"""
-        templates = db.templates.find({"user_id": user_id})
+        templates = template_collection.find({"user_id": user_id})
         return [{**template, "_id": str(template["_id"])} for template in templates]
 
     def get_by_user_id_and_template_name(self, user_id, template_name):
         """Get a template given its template_name and author"""
-        template = db.templates.find_one({"user_id": user_id, "template_name": template_name})
+        template = template_collection.find_one({"user_id": user_id, "template_name": template_name})
         if not template:
             return
         template["_id"] = str(template["_id"])
@@ -65,18 +69,18 @@ class Templates:
         if subject:
             data["subject"] = subject
 
-        template = db.templates.update_one({"_id": bson.ObjectId(book_id)}, {"$set": data})
+        template = template_collection.update_one({"_id": bson.ObjectId(book_id)}, {"$set": data})
         template = self.get_by_id(book_id)
         return template
 
     def delete(self, book_id):
         """Delete a template"""
-        template = db.templates.delete_one({"_id": bson.ObjectId(book_id)})
+        template = template_collection.delete_one({"_id": bson.ObjectId(book_id)})
         return template
 
     def delete_by_user_id(self, user_id):
         """Delete all templates created by a user"""
-        template = db.templates.delete_many({"user_id": bson.ObjectId(user_id)})
+        template = template_collection.delete_many({"user_id": bson.ObjectId(user_id)})
         return template
 
 
@@ -91,25 +95,25 @@ class User:
         user = self.get_by_email(email)
         if user:
             return
-        new_user = db.users.insert_one(
+        new_user = user_collection.insert_one(
             {
                 "first_name": first_name,
                 "last_name": last_name,
                 "email": email,
                 "password": self.encrypt_password(password),
-                "active": True,
+                "active": True
             }
         )
         return self.get_by_id(new_user.inserted_id)
 
     def get_all(self):
         """Get all users"""
-        users = db.users.find({"active": True})
+        users = user_collection.find({"active": True})
         return [{**user, "_id": str(user["_id"])} for user in users]
 
     def get_by_id(self, user_id):
         """Get a user by id"""
-        user = db.users.find_one({"_id": bson.ObjectId(user_id), "active": True})
+        user = user_collection.find_one({"_id": bson.ObjectId(user_id), "active": True})
         if not user:
             return
         user["_id"] = str(user["_id"])
@@ -118,7 +122,7 @@ class User:
 
     def get_by_email(self, email):
         """Get a user by email"""
-        user = db.users.find_one({"email": email, "active": True})
+        user = user_collection.find_one({"email": email, "active": True})
         if not user:
             return
         user["_id"] = str(user["_id"])
@@ -130,20 +134,20 @@ class User:
         if first_name:
             data["first_name"] = first_name
             data["last_name"] = last_name
-        user = db.users.update_one({"_id": bson.ObjectId(user_id)}, {"$set": data})
+        user = user_collection.update_one({"_id": bson.ObjectId(user_id)}, {"$set": data})
         user = self.get_by_id(user_id)
         return user
 
     def delete(self, user_id):
         """Delete a user"""
         Templates().delete_by_user_id(user_id)
-        user = db.users.delete_one({"_id": bson.ObjectId(user_id)})
+        user = user_collection.delete_one({"_id": bson.ObjectId(user_id)})
         user = self.get_by_id(user_id)
         return user
 
     def disable_account(self, user_id):
         """Disable a user account"""
-        user = db.users.update_one({"_id": bson.ObjectId(user_id)}, {"$set": {"active": False}})
+        user = user_collection.update_one({"_id": bson.ObjectId(user_id)}, {"$set": {"active": False}})
         user = self.get_by_id(user_id)
         return user
 
@@ -153,8 +157,10 @@ class User:
 
     def login(self, email, password):
         """Login a user"""
-        user = self.get_by_email(email)
-        if not user or not check_password_hash(user["password"], password):
-            return
-        user.pop("password")
-        return user
+        user = user_collection.find_one({"email": email})
+        if user is not None:
+            if check_password_hash(user["password"], password):
+                user["_id"] = str(user["_id"])
+                user.pop("password")
+                return user
+        return None
