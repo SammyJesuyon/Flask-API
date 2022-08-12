@@ -208,5 +208,5 @@ def forbidden(e):
     return jsonify({"message": "Endpoint Not Found", "error": str(e), "data": None}), 404
 
 
-# if __name__ == "__main__":
-#     app.run(debug=True)
+if __name__ == "__main__":
+    app.run(debug=os.environ.get("DEBUG"))
