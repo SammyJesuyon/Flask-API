@@ -8,7 +8,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 load_dotenv()
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DATABASE_URL = os.environ.get("DATABASE_URL") or "mongodb://localhost:27017/testDB"
 
 client = MongoClient(DATABASE_URL)
 db = client.get_database('testDB')
